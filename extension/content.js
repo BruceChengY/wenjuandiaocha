@@ -1,11 +1,8 @@
 // 内容脚本 - 处理页面选中文本的翻译
-console.log("Content script loaded!");
+console.log("Content script loaded! Version: Direct API");
 
 let translationBox = null;
 let isTranslating = false;
-
-// 测试基础功能
-console.log("Testing basic functionality...");
 
 // 监听文本选择事件
 document.addEventListener("mouseup", handleTextSelection);
@@ -13,7 +10,7 @@ document.addEventListener("keyup", handleTextSelection);
 
 console.log("Event listeners added");
 
-// 监听来自background script的消息
+// 监听来自background script的消息（保留用于右键菜单）
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "translate") {
     translateSelectedText(request.text);
@@ -25,10 +22,8 @@ function handleTextSelection() {
   const selectedText = window.getSelection().toString().trim();
   
   if (selectedText && selectedText.length > 0 && selectedText.length < 500) {
-    // 防抖处理，避免频繁翻译
     clearTimeout(window.translationTimeout);
     window.translationTimeout = setTimeout(() => {
-      // 检查是否为英文文本
       if (isEnglishText(selectedText)) {
         showTranslationBox(selectedText);
       }
@@ -40,7 +35,6 @@ function handleTextSelection() {
 
 // 检查是否为英文文本
 function isEnglishText(text) {
-  // 简单的英文检测：包含英文字母且英文字符占比超过50%
   const englishChars = text.match(/[a-zA-Z]/g) || [];
   const totalChars = text.replace(/\s/g, '').length;
   return englishChars.length / totalChars > 0.5;
@@ -87,26 +81,20 @@ async function showTranslationBox(text) {
   await translateSelectedText(text);
 }
 
-// 翻译选中的文本
-// 翻译选中的文本
+// 翻译选中的文本 - 新版本：直接调用API
 async function translateSelectedText(text) {
   if (isTranslating) return;
   
   isTranslating = true;
+  console.log("Starting translation for:", text);
+  console.log("Using direct API call method");
   
   try {
-    console.log("Starting translation for:", text);
+    // 直接调用后端API
+    const apiUrl = "http://localhost:8000/translate";
+    console.log("Calling API:", apiUrl);
     
-    // 检查Chrome运行环境
-    if (!chrome.runtime || !chrome.runtime.id) {
-      console.error("Chrome extension context is not valid");
-      displayTranslationError("插件未正确加载，请刷新页面");
-      return;
-    }
-    
-    // 直接调用后端API进行测试
-    console.log("Calling backend API directly for testing...");
-    const apiResponse = await fetch("http://localhost:8000/translate", {
+    const response = await fetch(apiUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -118,28 +106,44 @@ async function translateSelectedText(text) {
       })
     });
     
-    if (!apiResponse.ok) {
-      throw new Error(`API请求失败: ${apiResponse.status}`);
+    console.log("API response status:", response.status);
+    
+    if (!response.ok) {
+      throw new Error(`API请求失败: ${response.status}`);
     }
     
-    const result = await apiResponse.json();
-    console.log("API response:", result);
+    const result = await response.json();
+    console.log("Translation result:", result);
     
+    // 显示翻译结果
     displayTranslationResult(text, result);
     
   } catch (error) {
-    console.error("翻译失败:", error);
+    console.error("Translation error:", error);
+    
+    let errorMessage = "翻译失败";
     if (error.message.includes("Failed to fetch")) {
-      displayTranslationError("无法连接到翻译服务，请确保后端服务正在运行(端口8000)");
-    } else if (error.message.includes("Extension context invalidated")) {
-      displayTranslationError("插件已更新，请刷新页面(F5)后重试");
+      errorMessage = "无法连接到翻译服务，请确保后端服务正在运行(端口8000)";
+    } else if (error.message.includes("API请求失败")) {
+      errorMessage = error.message;
     } else {
-      displayTranslationError("翻译失败: " + error.message);
+      errorMessage = "翻译服务出错: " + error.message;
     }
+    
+    displayTranslationError(errorMessage);
   } finally {
     isTranslating = false;
   }
 }
+
+// 显示翻译结果
+function displayTranslationResult(originalText, result) {
+  console.log("Displaying translation result");
+  
+  if (!translationBox) {
+    console.error("Translation box not found!");
+    return;
+  }
   
   const title = translationBox.querySelector(".translation-title");
   const content = translationBox.querySelector(".translation-content");
@@ -158,10 +162,9 @@ async function translateSelectedText(text) {
       <strong>译文：</strong>${result.translation || "无翻译结果"}
     </div>
     <div class="translation-info">
-      ${result.source_lang || "unknown"} → ${result.target_lang || "unknown"}
+      ${result.source_lang || "en"} → ${result.target_lang || "zh-cn"}
     </div>
   `;
-  console.log("Translation result displayed successfully");
 }
 
 // 显示翻译错误
@@ -196,3 +199,5 @@ document.addEventListener("click", (event) => {
 
 // 滚动时隐藏翻译框
 window.addEventListener("scroll", hideTranslationBox);
+
+console.log("Content script initialization complete");
