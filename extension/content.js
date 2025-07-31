@@ -1,5 +1,5 @@
 // 内容脚本 - 处理页面选中文本的翻译
-console.log("Content script loaded! Version: Direct API");
+console.log("Content script loaded! Version: Direct API with timeout");
 
 let translationBox = null;
 let isTranslating = false;
@@ -81,20 +81,48 @@ async function showTranslationBox(text) {
   await translateSelectedText(text);
 }
 
+// 创建一个带超时的fetch函数
+async function fetchWithTimeout(url, options = {}, timeout = 5000) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+  
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+    clearTimeout(id);
+    return response;
+  } catch (error) {
+    clearTimeout(id);
+    if (error.name === 'AbortError') {
+      throw new Error('请求超时');
+    }
+    throw error;
+  }
+}
+
 // 翻译选中的文本 - 新版本：直接调用API
 async function translateSelectedText(text) {
   if (isTranslating) return;
   
   isTranslating = true;
   console.log("Starting translation for:", text);
-  console.log("Using direct API call method");
+  console.log("Using direct API call method with timeout");
   
   try {
     // 直接调用后端API
     const apiUrl = "http://localhost:8000/translate";
     console.log("Calling API:", apiUrl);
+    console.log("Request body:", {
+      text: text,
+      source_lang: "en",
+      target_lang: "zh-cn"
+    });
     
-    const response = await fetch(apiUrl, {
+    const startTime = Date.now();
+    
+    const response = await fetchWithTimeout(apiUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -104,12 +132,17 @@ async function translateSelectedText(text) {
         source_lang: "en",
         target_lang: "zh-cn"
       })
-    });
+    }, 5000); // 5秒超时
     
+    const responseTime = Date.now() - startTime;
+    console.log(`API responded in ${responseTime}ms`);
     console.log("API response status:", response.status);
+    console.log("Response headers:", response.headers);
     
     if (!response.ok) {
-      throw new Error(`API请求失败: ${response.status}`);
+      const errorText = await response.text();
+      console.error("API error response:", errorText);
+      throw new Error(`API请求失败: ${response.status} - ${errorText}`);
     }
     
     const result = await response.json();
@@ -120,10 +153,16 @@ async function translateSelectedText(text) {
     
   } catch (error) {
     console.error("Translation error:", error);
+    console.error("Error type:", error.name);
+    console.error("Error message:", error.message);
     
     let errorMessage = "翻译失败";
-    if (error.message.includes("Failed to fetch")) {
+    if (error.message === '请求超时') {
+      errorMessage = "翻译请求超时，请检查后端服务是否正常运行";
+    } else if (error.message.includes("Failed to fetch")) {
       errorMessage = "无法连接到翻译服务，请确保后端服务正在运行(端口8000)";
+    } else if (error.message.includes("NetworkError")) {
+      errorMessage = "网络错误，请检查网络连接";
     } else if (error.message.includes("API请求失败")) {
       errorMessage = error.message;
     } else {
@@ -133,6 +172,7 @@ async function translateSelectedText(text) {
     displayTranslationError(errorMessage);
   } finally {
     isTranslating = false;
+    console.log("Translation process completed");
   }
 }
 
@@ -199,5 +239,12 @@ document.addEventListener("click", (event) => {
 
 // 滚动时隐藏翻译框
 window.addEventListener("scroll", hideTranslationBox);
+
+// 测试API连接
+console.log("Testing API connection...");
+fetch("http://localhost:8000/health")
+  .then(r => r.json())
+  .then(data => console.log("API health check successful:", data))
+  .catch(err => console.error("API health check failed:", err));
 
 console.log("Content script initialization complete");
