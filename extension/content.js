@@ -88,6 +88,7 @@ async function showTranslationBox(text) {
 }
 
 // 翻译选中的文本
+// 翻译选中的文本
 async function translateSelectedText(text) {
   if (isTranslating) return;
   
@@ -96,52 +97,49 @@ async function translateSelectedText(text) {
   try {
     console.log("Starting translation for:", text);
     
-    // 发送翻译请求到background script
-    const response = await new Promise((resolve, reject) => {
-      try {
-        console.log("Sending message to background script");
-        chrome.runtime.sendMessage({
-          action: "translate",
-          text: text
-        }, (response) => {
-          console.log("Received response:", response);
-          if (chrome.runtime.lastError) {
-            console.error("Runtime error:", chrome.runtime.lastError);
-            reject(new Error(chrome.runtime.lastError.message));
-          } else if (!response) {
-            reject(new Error("No response from background script"));
-          } else {
-            resolve(response);
-          }
-        });
-      } catch (error) {
-        console.error("Send message error:", error);
-        reject(error);
-      }
+    // 检查Chrome运行环境
+    if (!chrome.runtime || !chrome.runtime.id) {
+      console.error("Chrome extension context is not valid");
+      displayTranslationError("插件未正确加载，请刷新页面");
+      return;
+    }
+    
+    // 直接调用后端API进行测试
+    console.log("Calling backend API directly for testing...");
+    const apiResponse = await fetch("http://localhost:8000/translate", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        text: text,
+        source_lang: "en",
+        target_lang: "zh-cn"
+      })
     });
     
-    if (response && response.success) {
-      console.log("Translation successful:", response.data);
-      displayTranslationResult(text, response.data);
-    } else {
-      console.error("Translation failed:", response ? response.error : "Unknown error");
-      displayTranslationError(response ? response.error : "翻译服务无响应");
+    if (!apiResponse.ok) {
+      throw new Error(`API请求失败: ${apiResponse.status}`);
     }
+    
+    const result = await apiResponse.json();
+    console.log("API response:", result);
+    
+    displayTranslationResult(text, result);
+    
   } catch (error) {
     console.error("翻译失败:", error);
-    displayTranslationError("翻译失败: " + error.message);
+    if (error.message.includes("Failed to fetch")) {
+      displayTranslationError("无法连接到翻译服务，请确保后端服务正在运行(端口8000)");
+    } else if (error.message.includes("Extension context invalidated")) {
+      displayTranslationError("插件已更新，请刷新页面(F5)后重试");
+    } else {
+      displayTranslationError("翻译失败: " + error.message);
+    }
   } finally {
     isTranslating = false;
   }
 }
-
-// 显示翻译结果
-function displayTranslationResult(originalText, result) {
-  console.log("Displaying translation result:", result);
-  if (!translationBox) {
-    console.error("Translation box not found!");
-    return;
-  }
   
   const title = translationBox.querySelector(".translation-title");
   const content = translationBox.querySelector(".translation-content");
