@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "智能翻译助手",
+  "version": "1.0.0",
+  "description": "快速翻译网页中选中的英文文本，支持右键菜单和弹窗翻译",
+  "permissions": [
+    "activeTab",
+    "contextMenus",
+    "storage"
+  ],
+  "host_permissions": [
+    "http://localhost:8000/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "css": ["styles.css"]
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "智能翻译助手"
+  }
+}
